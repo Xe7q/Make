@@ -98,26 +98,62 @@ export default function Home() {
   const addToCart = (item: any) => setCart((prev) => [...prev, { ...item, qty: 1 }]);
 
   async function handleFileUpload(e: any) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    try {
-      const rates: Rates = (() => {
-        try { return { ...DEFAULT_RATES, ...(JSON.parse(localStorage.getItem('make_rates') || 'null') || {}) }; } catch { return DEFAULT_RATES; }
-      })();
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('rates', JSON.stringify(rates));
-      const r = await fetch('/api/price', { method: 'POST', body: fd });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data?.error || 'Failed to price');
-      setPriceResult(data);
-    } catch (err: any) {
-      alert(err?.message || 'Error');
-    } finally {
-      setUploading(false);
+   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  setUploading?.(true);
+  try {
+    // defaults + admin overrides from localStorage
+    const DEFAULTS = {
+      filamentDensityGperCm3: 1.24,
+      filamentTHBperKG: 800,
+      printSpeedCm3PerHr: 50,
+      electricityTHBperHr: 5,
+      laborTHBperJob: 100,
+      markupPercent: 0,
+    };
+    const rates = (() => {
+      try { return { ...DEFAULTS, ...(JSON.parse(localStorage.getItem('make_rates') || 'null') || {}) }; }
+      catch { return DEFAULTS; }
+    })();
+
+    const buffer = await file.arrayBuffer();
+    // Detect binary STL: 84 + 50*n bytes pattern
+    let volumeCm3: number;
+    if (buffer.byteLength >= 84) {
+      const n = new DataView(buffer).getUint32(80, true);
+      if (84 + 50 * n === buffer.byteLength) {
+        volumeCm3 = volumeFromBinarySTL(buffer);
+      } else {
+        const text = new TextDecoder().decode(new Uint8Array(buffer));
+        volumeCm3 = text.trim().toLowerCase().startsWith('solid')
+          ? volumeFromAsciiSTL(text)
+          : volumeFromBinarySTL(buffer); // fallback
+      }
+    } else {
+      const text = new TextDecoder().decode(new Uint8Array(buffer));
+      volumeCm3 = volumeFromAsciiSTL(text);
     }
+
+    const p = estimatePricing(volumeCm3, rates);
+    setPriceResult({
+      fileName: file.name,
+      weight: p.weightG,
+      time: p.timeHours,
+      materialCost: p.materialCost,
+      electricityCost: p.electricityCost,
+      laborCost: p.laborCost,
+      total: p.total,
+      volumeCm3,
+    });
+  } catch (err: any) {
+    alert(err?.message || 'Failed to read STL');
+  } finally {
+    setUploading?.(false);
   }
+};
+
 
   const cartSubtotal = cart.reduce((s, i) => s + i.priceTHB * i.qty, 0);
   const grandTotal = cartSubtotal + (priceResult?.total || 0);
