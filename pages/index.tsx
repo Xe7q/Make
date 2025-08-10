@@ -20,32 +20,51 @@ export default function Home() {
   const addToCart = (item: any) => setCart((prev) => [...prev, { ...item, qty: 1 }]);
 
   async function handleFileUpload(e: any) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    try {
-      // Call demo API with file size heuristic
-      const sizeKB = Math.max(1, Math.round(file.size / 1024));
-      const r = await fetch('/api/price', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sizeKB }),
-      });
-      const data = await r.json();
-      if (r.ok) {
-        setPriceResult({
-          fileName: file.name,
-          sizeKB,
-          ...data,
-        });
-      } else {
-        alert(data?.error || 'Failed to calculate price');
+    const handleFileUpload = async (e: any) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  try {
+    // defaults; will read overrides from /admin (localStorage) if present
+    const DEFAULTS = {
+      filamentDensityGperCm3: 1.24,
+      filamentTHBperKG: 800,
+      printSpeedCm3PerHr: 50,
+      electricityTHBperHr: 5,
+      laborTHBperJob: 100,
+      markupPercent: 0,
+    };
+    const rates = (() => {
+      try {
+        return { ...DEFAULTS, ...(JSON.parse(localStorage.getItem('make_rates') || 'null') || {}) };
+      } catch {
+        return DEFAULTS;
       }
-    } catch (err: any) {
-      alert(err?.message || 'Error');
-    } finally {
-      setUploading(false);
-    }
+    })();
+
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('rates', JSON.stringify(rates));
+
+    const r = await fetch('/api/price', { method: 'POST', body: fd });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data?.error || 'Failed to price');
+
+    // Map API fields into your current UI shape
+    setPriceResult({
+      fileName: data.fileName || file.name,
+      weight: data.weightG,
+      time: data.timeHours,
+      materialCost: data.materialCost,
+      electricityCost: data.electricityCost,
+      laborCost: data.laborCost,
+      total: data.total,
+    });
+  } catch (err: any) {
+    alert(err?.message || 'Error');
+  }
+};
+
   }
 
   const cartSubtotal = cart.reduce((s, i) => s + i.priceTHB * i.qty, 0);
