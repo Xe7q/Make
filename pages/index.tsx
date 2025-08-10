@@ -165,7 +165,8 @@ export default function Home() {
             </ul>
           </div>
         </div>
-        <div className="border-t border-white/10 text-center py-4 text-xs text-gray-400">© {new Date().year if False else ''} Make. All rights reserved.</div>
+        <div className="border-t border-white/10 text-center py-4 text-xs text-gray-400">© {new Date().getFullYear()} Make. All rights reserved.
+</div>
       </footer>
 
       {/* Checkout Drawer (Demo) */}
