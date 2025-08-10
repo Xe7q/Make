@@ -21,6 +21,57 @@ const DEFAULT_RATES: Rates = {
   laborTHBperJob: 100,
   markupPercent: 0,
 };
+function volumeFromBinarySTL(buffer: ArrayBuffer): number {
+  const dv = new DataView(buffer);
+  const n = dv.getUint32(80, true);
+  let off = 84;
+  let v6 = 0;
+  for (let i = 0; i < n; i++) {
+    off += 12; // skip normal
+    const v1x = dv.getFloat32(off, true), v1y = dv.getFloat32(off + 4, true), v1z = dv.getFloat32(off + 8, true); off += 12;
+    const v2x = dv.getFloat32(off, true), v2y = dv.getFloat32(off + 4, true), v2z = dv.getFloat32(off + 8, true); off += 12;
+    const v3x = dv.getFloat32(off, true), v3y = dv.getFloat32(off + 4, true), v3z = dv.getFloat32(off + 8, true); off += 12;
+    off += 2; // attr byte count
+    const cx = v2y * v3z - v2z * v3y;
+    const cy = v2z * v3x - v2x * v3z;
+    const cz = v2x * v3y - v2y * v3x;
+    v6 += v1x * cx + v1y * cy + v1z * cz;
+  }
+  const volumeMm3 = Math.abs(v6) / 6.0;
+  return volumeMm3 / 1000.0; // cm³
+}
+
+function volumeFromAsciiSTL(text: string): number {
+  const verts: number[] = [];
+  const re = /vertex\s+([\-0-9.eE]+)\s+([\-0-9.eE]+)\s+([\-0-9.eE]+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    verts.push(parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3]));
+  }
+  let v6 = 0;
+  for (let i = 0; i + 8 < verts.length; i += 9) {
+    const v1x = verts[i], v1y = verts[i + 1], v1z = verts[i + 2];
+    const v2x = verts[i + 3], v2y = verts[i + 4], v2z = verts[i + 5];
+    const v3x = verts[i + 6], v3y = verts[i + 7], v3z = verts[i + 8];
+    const cx = v2y * v3z - v2z * v3y;
+    const cy = v2z * v3x - v2x * v3z;
+    const cz = v2x * v3y - v2y * v3x;
+    v6 += v1x * cx + v1y * cy + v1z * cz;
+  }
+  const volumeMm3 = Math.abs(v6) / 6.0;
+  return volumeMm3 / 1000.0; // cm³
+}
+
+function estimatePricing(volumeCm3: number, rates: any) {
+  const weightG = volumeCm3 * rates.filamentDensityGperCm3;
+  const timeHours = volumeCm3 / Math.max(0.0001, rates.printSpeedCm3PerHr);
+  const materialCost = (rates.filamentTHBperKG / 1000) * weightG;
+  const electricityCost = rates.electricityTHBperHr * timeHours;
+  const laborCost = rates.laborTHBperJob;
+  const subtotal = materialCost + electricityCost + laborCost;
+  const total = subtotal * (1 + (rates.markupPercent || 0) / 100);
+  return { weightG, timeHours, materialCost, electricityCost, laborCost, total };
+}
 
 export default function Home() {
   const [priceResult, setPriceResult] = useState<any>(null);
