@@ -98,7 +98,7 @@ export default function Home() {
   const addToCart = (item: any) => setCart((prev) => [...prev, { ...item, qty: 1 }]);
 
   async function handleFileUpload(e: any) {
-   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
   const file = e.target.files?.[0];
   if (!file) return;
 
@@ -153,6 +153,7 @@ export default function Home() {
     setUploading?.(false);
   }
 };
+
 
 
   const cartSubtotal = cart.reduce((s, i) => s + i.priceTHB * i.qty, 0);
